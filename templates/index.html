@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-Driven Smart Ambulance Routing</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXOPeQJ_nH8RK8UiXHxXGjXlrVcTZLZ4o&libraries=places"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeIn {
+      animation: fadeIn 0.5s ease-out forwards;
+    }
+    .map-container {
+      transition: all 0.3s ease;
+    }
+    .map-container:hover {
+      transform: scale(1.02);
+    }
+    button {
+      transition: transform 0.2s ease, background-color 0.2s ease;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 text-gray-800 dark:text-gray-200 font-inter">
+  <header class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 px-4 shadow-lg flex justify-between items-center">
+    <h1 class="text-2xl md:text-3xl font-bold flex items-center gap-2">
+      <span>🚑</span> AI-Driven Smart Ambulance Routing
+    </h1>
+    <button id="themeToggle" class="bg-transparent border border-white px-4 py-2 rounded-lg hover:bg-white/10 transition-colors" aria-label="Toggle dark mode">
+      <span class="dark:hidden">🌙 Dark Mode</span>
+      <span class="hidden dark:inline">☀️ Light Mode</span>
+    </button>
+  </header>
+
+  <main class="container mx-auto p-4 md:p-6 max-w-5xl">
+    <section class="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 mb-6 sticky top-4 z-10 animate-fadeIn">
+      <form id="locationForm" class="space-y-4">
+        <h3 class="text-xl font-semibold">Enter Your Location</h3>
+        <input type="text" id="location" name="location" placeholder="e.g., Sydney, Australia" required aria-label="Enter your location" class="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
+        <button type="submit" id="submitButton" aria-label="Find nearest hospitals" class="w-full md:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Find Nearest Hospitals</button>
+        <div id="loading" class="hidden text-blue-600 mt-2">Loading...</div>
+        <div id="feedback" class="hidden text-red-500 mt-2"></div>
+      </form>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 mb-6 animate-fadeIn">
+      <div class="info">
+        <p><strong>🌡️ Temperature:</strong> <span id="temperature">-</span></p>
+      </div>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 mb-6 animate-fadeIn">
+      <h4 class="text-lg font-semibold mb-4">🛣️ Route Summary</h4>
+      <p id="routeHospital" class="mb-2"></p>
+      <p><strong>🕒 ETA:</strong> <span id="routeETA">-</span></p>
+      <p><strong>📏 Distance:</strong> <span id="routeDistance">-</span></p>
+      <div class="flex flex-wrap gap-4 mt-4">
+        <button id="nextHospitalButton" aria-label="View next nearest hospital" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Next Nearest Hospital</button>
+        <button id="exportRouteButton" aria-label="Export route as PDF" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Export Route</button>
+        <button id="shareRouteButton" aria-label="Share route link" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Share Route</button>
+      </div>
+    </section>
+
+    <section class="map-container mb-6">
+      <div id="map" class="h-[500px] rounded-xl border border-gray-300 dark:border-gray-600"></div>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 mb-6 animate-fadeIn">
+      <h4 class="text-lg font-semibold mb-4">🕒 Live ETA</h4>
+      <p><strong>ETA:</strong> <span id="liveETA">-</span></p>
+      <p><strong>Distance:</strong> <span id="liveDistance">-</span></p>
+      <p><strong>Traffic Level:</strong> <span id="trafficLevel" class="inline-flex items-center gap-2">
+        <span>-</span>
+        <span id="trafficIcon" class="w-4 h-4 rounded-full"></span>
+      </span></p>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 mb-6 animate-fadeIn">
+      <h4 class="text-lg font-semibold mb-4">Nearby Hospitals</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-separate border-spacing-0">
+          <thead>
+            <tr class="bg-blue-600 text-white">
+              <th class="p-3 rounded-tl-lg">Name</th>
+              <th class="p-3">Distance</th>
+              <th class="p-3 rounded-tr-lg">ETA</th>
+            </tr>
+          </thead>
+          <tbody id="hospitalBody" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <button onclick="relocate()" aria-label="Update current location" class="w-full md:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Relocate</button>
+  </main>
+
+  <script>
+    let map;
+    let hospitals = [];
+    let currentHospitalIndex = 0;
+    let userLat, userLon;
+    let temperature = "";
+    let weatherDesc = "";
+    let watchId = null;
+    let tracking = false;
+
+    function initAutocomplete() {
+      const input = document.getElementById('location');
+      const autocomplete = new google.maps.places.Autocomplete(input, {
+        types: ['geocode'],
+        fields: ['formatted_address']
+      });
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address) {
+          input.value = place.formatted_address;
+        }
+      });
+    }
+
+    google.maps.event.addDomListener(window, 'load', initAutocomplete);
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      const newTheme = html.classList.contains('dark') ? 'light' : 'dark';
+      html.classList.toggle('dark');
+      localStorage.setItem('theme', newTheme);
+      document.getElementById('themeToggle').querySelector('span').textContent = newTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+    }
+
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') document.documentElement.classList.add('dark');
+    document.getElementById('themeToggle').querySelector('span').textContent = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+
+    async function fetchRoute(destLat, destLon) {
+      const response = await fetch('/get_route', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: [userLat, userLon], dest: [destLat, destLon] })
+      });
+      return await response.json();
+    }
+
+    async function fetchLiveEta(hosp) {
+      const response = await fetch('/live_eta', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: [userLat, userLon], hospital: [hosp.lat, hosp.lon] })
+      });
+      const data = await response.json();
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+      document.getElementById('liveETA').textContent = data.eta;
+      document.getElementById('liveDistance').textContent = data.distance;
+      document.getElementById('trafficLevel').firstChild.textContent = data.traffic_level;
+      const trafficIcon = document.getElementById('trafficIcon');
+      trafficIcon.style.backgroundColor = data.traffic_level === "red" ? "red" : data.traffic_level === "yellow" ? "orange" : "green";
+    }
+
+    function startTracking(hosp) {
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        return;
+      }
+      if (tracking) return;
+      tracking = true;
+      watchId = navigator.geolocation.watchPosition(async (position) => {
+        userLat = position.coords.latitude;
+        userLon = position.coords.longitude;
+        const route = await fetchRoute(hosp.lat, hosp.lon);
+        displayRoute(hosp, route);
+      }, console.error, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+    }
+
+    function stopTracking() {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        tracking = false;
+      }
+    }
+
+    window.relocate = async function () {
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        userLat = position.coords.latitude;
+        userLon = position.coords.longitude;
+        const hosp = hospitals[currentHospitalIndex];
+        const route = await fetchRoute(hosp.lat, hosp.lon);
+        displayRoute(hosp, route);
+      });
+    };
+
+    function exportRouteToPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('AI-Driven Smart Ambulance Routing', 20, 20);
+      doc.setFontSize(12);
+      doc.text(`Hospital: ${document.getElementById('routeHospital').textContent}`, 20, 40);
+      doc.text(`ETA: ${document.getElementById('routeETA').textContent}`, 20, 50);
+      doc.text(`Distance: ${document.getElementById('routeDistance').textContent}`, 20, 60);
+      doc.text(`Temperature: ${document.getElementById('temperature').textContent}`, 20, 70);
+      doc.text(`Live ETA: ${document.getElementById('liveETA').textContent}`, 20, 80);
+      doc.text(`Live Distance: ${document.getElementById('liveDistance').textContent}`, 20, 90);
+      doc.text(`Traffic Level: ${document.getElementById('trafficLevel').firstChild.textContent}`, 20, 100);
+      doc.save('route_summary.pdf');
+    }
+
+    function shareRouteLink() {
+  const hospital = document.getElementById('routeHospital').textContent.replace('🚑 ', '');
+  const eta = document.getElementById('routeETA').textContent;
+  const distance = document.getElementById('routeDistance').textContent;
+  const shareText = `Ambulance Route: ${hospital}\nETA: ${eta}\nDistance: ${distance}`;
+  const encodedText = encodeURIComponent(shareText);
+  window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+}
+
+
+    function displayRoute(hosp, route) {
+      document.getElementById('routeHospital').textContent = `🚑 ${hosp.name}`;
+      document.getElementById('routeETA').textContent = hosp.duration;
+      document.getElementById('routeDistance').textContent = hosp.distance;
+      document.getElementById('temperature').textContent = `${temperature}°C (${weatherDesc})`;
+
+      if (!map) {
+        map = L.map('map', { zoomControl: true, scrollWheelZoom: false }).setView([userLat, userLon], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+      } else {
+        map.eachLayer(layer => { if (!(layer instanceof L.TileLayer)) map.removeLayer(layer); });
+      }
+
+      L.marker([userLat, userLon], {
+        icon: L.icon({
+          iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+          iconSize: [35, 35],
+          iconAnchor: [17, 35],
+          popupAnchor: [0, -35]
+        })
+      }).addTo(map).bindPopup("Your Location").openPopup();
+
+      L.marker([hosp.lat, hosp.lon], {
+        icon: L.icon({
+          iconUrl: 'https://cdn-icons-png.flaticon.com/512/2965/2965567.png',
+          iconSize: [35, 35],
+          iconAnchor: [17, 35],
+          popupAnchor: [0, -35]
+        })
+      }).addTo(map).bindPopup(`<b>${hosp.name}</b><br>ETA: ${hosp.duration}<br>Distance: ${hosp.distance}`);
+
+      const polyline = L.polyline(route.route, { color: "#3b82f6", weight: 5, opacity: 0.7 }).addTo(map);
+      const trafficColors = ["green", "yellow", "red"];
+      route.route.forEach((pt, idx) => {
+        if (idx % 5 === 0) {
+          const color = trafficColors[Math.floor(Math.random() * trafficColors.length)];
+          L.circle(pt, { radius: 50, color, fillColor: color, fillOpacity: 0.4 }).addTo(map);
+        }
+      });
+
+      map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+      fetchLiveEta(hosp);
+    }
+
+    document.getElementById('locationForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitButton = document.getElementById('submitButton');
+      const loading = document.getElementById('loading');
+      const feedback = document.getElementById('feedback');
+      submitButton.disabled = true;
+      loading.classList.remove('hidden');
+      feedback.classList.add('hidden');
+
+      try {
+        const location = document.getElementById('location').value;
+        const response = await fetch('/get_data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ location })
+        });
+        const data = await response.json();
+        if (data.error) {
+          feedback.textContent = data.error;
+          feedback.classList.remove('hidden');
+          return;
+        }
+
+        userLat = data.lat;
+        userLon = data.lon;
+        hospitals = data.hospitals;
+        temperature = data.temperature;
+        weatherDesc = data.description;
+        currentHospitalIndex = 0;
+
+        const tbody = document.getElementById("hospitalBody");
+        tbody.innerHTML = "";
+        hospitals.forEach(hosp => {
+          const row = document.createElement("tr");
+          row.className = "hover:bg-gray-100 dark:hover:bg-gray-700";
+          row.innerHTML = `<td class="p-3">${hosp.name}</td><td class="p-3">${hosp.distance}</td><td class="p-3">${hosp.duration}</td>`;
+          tbody.appendChild(row);
+        });
+
+        const route = await fetchRoute(hospitals[0].lat, hospitals[0].lon);
+        displayRoute(hospitals[0], route);
+      } catch (error) {
+        feedback.textContent = 'An error occurred. Please try again.';
+        feedback.classList.remove('hidden');
+      } finally {
+        submitButton.disabled = false;
+        loading.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('nextHospitalButton').addEventListener('click', async () => {
+      if (!hospitals.length) return;
+      currentHospitalIndex = (currentHospitalIndex + 1) % hospitals.length;
+      const hosp = hospitals[currentHospitalIndex];
+      const route = await fetchRoute(hosp.lat, hosp.lon);
+      displayRoute(hosp, route);
+    });
+
+    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    document.getElementById('exportRouteButton').addEventListener('click', exportRouteToPDF);
+    document.getElementById('shareRouteButton').addEventListener('click', shareRouteLink);
+  </script>
+</body>
+</html>
